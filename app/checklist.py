@@ -33,10 +33,10 @@ def find_task_for_branch(
         return None
 
     column_ids: list[str] = []
-    if column_id:
-        column_ids.append(column_id)
-    elif board_id:
+    if board_id:
         column_ids = [column.id for column in api.get_columns(board_id)]
+    elif column_id:
+        column_ids.append(column_id)
 
     for current_column_id in column_ids:
         task = _find_task_in_column(api, prefix, branch, current_column_id)
@@ -57,10 +57,7 @@ def _find_task_in_column(api, prefix: str, branch: str, column_id: str) -> dict 
             if not task_id.startswith(prefix):
                 continue
 
-            task = api.get_task(task_id)
-            description = task.get("description") or ""
-            if branch in description or f"Branch: {branch}" in description or not description.strip():
-                return task
+            return api.get_task(task_id)
 
         paging = page.get("paging", {}) if isinstance(page, dict) else {}
         if not paging.get("next") and len(items) < limit:

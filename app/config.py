@@ -21,11 +21,55 @@ def get_env_path() -> str:
     return os.path.join(root_dir, ".env")
 
 
-def _read_env_values() -> dict[str, str]:
-    env_path = get_env_path()
-    if not os.path.exists(env_path):
+def get_yougile_env_path() -> str:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(current_dir)
+    return os.path.join(root_dir, "yougile.env")
+
+
+def _read_env_file(path: str) -> dict[str, str]:
+    if not os.path.exists(path):
         return {}
-    return {key: value for key, value in dotenv_values(env_path).items() if value}
+    return {key: value for key, value in dotenv_values(path).items() if value}
+
+
+def _read_env_values() -> dict[str, str]:
+    return _read_env_file(get_env_path())
+
+
+def _read_yougile_env_values() -> dict[str, str]:
+    return _read_env_file(get_yougile_env_path())
+
+
+def load_yougile_settings() -> dict[str, str]:
+    values = _read_yougile_env_values()
+    values.update(_read_env_values())
+
+    token = (
+        os.environ.get("YOUGILE_TOKEN", "").strip()
+        or os.environ.get("YOUGILE_BEARER_TOKEN", "").strip()
+        or values.get("YOUGILE_BEARER_TOKEN", "").strip()
+    )
+    return {
+        "token": token,
+        "project_id": (
+            os.environ.get("YOUGILE_PROJECT_ID", "").strip()
+            or values.get("YOUGILE_PROJECT_ID", "").strip()
+        ),
+        "board_id": (
+            os.environ.get("YOUGILE_BOARD_ID", "").strip()
+            or values.get("YOUGILE_BOARD_ID", "").strip()
+        ),
+        "column_id": (
+            os.environ.get("YOUGILE_COLUMN_ID", "").strip()
+            or values.get("YOUGILE_COLUMN_ID", "").strip()
+        ),
+        "poll_interval": (
+            os.environ.get("YOUGILE_POLL_INTERVAL", "").strip()
+            or values.get("YOUGILE_POLL_INTERVAL", "10").strip()
+            or "10"
+        ),
+    }
 
 
 def _write_env_values(values: dict[str, str]) -> None:
@@ -40,8 +84,21 @@ def _write_env_values(values: dict[str, str]) -> None:
     print(f"Настройки сохранены в {env_path}")
 
 
+def _write_yougile_env_values(values: dict[str, str]) -> None:
+    yougile_path = get_yougile_env_path()
+    merged = _read_yougile_env_values()
+    merged.update(values)
+
+    lines = [f"{key}={merged[key]}" for key in ENV_KEYS if key in merged and merged[key]]
+    with open(yougile_path, "w", encoding="utf-8") as file:
+        file.write("\n".join(lines) + ("\n" if lines else ""))
+
+    print(f"Настройки сохранены в {yougile_path}")
+
+
 def save_bearer_token(token: str) -> None:
     _write_env_values({"YOUGILE_BEARER_TOKEN": token})
+    _write_yougile_env_values({"YOUGILE_BEARER_TOKEN": token})
 
 
 def prompt_bearer_token() -> str:
@@ -54,8 +111,8 @@ def prompt_bearer_token() -> str:
 
 
 def load_bearer_token(api_factory) -> str:
-    env_values = _read_env_values()
-    token = env_values.get("YOUGILE_BEARER_TOKEN", "").strip()
+    settings = load_yougile_settings()
+    token = settings["token"]
 
     if token:
         api = api_factory(token)
@@ -80,28 +137,28 @@ def save_monitor_config(
     board_id: str = "",
     poll_interval: int = 10,
 ) -> None:
-    _write_env_values(
-        {
-            "YOUGILE_PROJECT_ID": project_id,
-            "YOUGILE_BOARD_ID": board_id,
-            "YOUGILE_COLUMN_ID": column_id,
-            "YOUGILE_POLL_INTERVAL": str(poll_interval),
-        }
-    )
+    values = {
+        "YOUGILE_PROJECT_ID": project_id,
+        "YOUGILE_BOARD_ID": board_id,
+        "YOUGILE_COLUMN_ID": column_id,
+        "YOUGILE_POLL_INTERVAL": str(poll_interval),
+    }
+    _write_env_values(values)
+    _write_yougile_env_values(values)
 
 
 def has_saved_monitor_config() -> bool:
-    env_values = _read_env_values()
-    return bool(env_values.get("YOUGILE_COLUMN_ID", "").strip())
+    settings = load_yougile_settings()
+    return bool(settings["column_id"])
 
 
 def load_monitor_config() -> MonitorConfig:
-    env_values = _read_env_values()
-    poll_interval = int(env_values.get("YOUGILE_POLL_INTERVAL", "10") or "10")
+    settings = load_yougile_settings()
+    poll_interval = int(settings["poll_interval"] or "10")
 
     return MonitorConfig(
-        column_id=env_values.get("YOUGILE_COLUMN_ID", "").strip(),
-        project_id=env_values.get("YOUGILE_PROJECT_ID", "").strip(),
-        board_id=env_values.get("YOUGILE_BOARD_ID", "").strip(),
+        column_id=settings["column_id"],
+        project_id=settings["project_id"],
+        board_id=settings["board_id"],
         poll_interval=poll_interval,
     )

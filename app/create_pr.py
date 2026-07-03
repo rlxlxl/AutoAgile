@@ -7,6 +7,7 @@ import urllib.request
 
 from app.api import YOUGileAPI
 from app.checklist import checklist_to_markdown, find_task_for_branch
+from app.config import load_yougile_settings
 
 
 def _github_request(method: str, url: str, token: str, payload: dict | None = None) -> dict:
@@ -38,9 +39,10 @@ def main() -> int:
         or os.environ.get("GITHUB_REF", "").split("/")[-1]
     )
     github_token = os.environ.get("GITHUB_TOKEN", "")
-    yougile_token = os.environ.get("YOUGILE_TOKEN", "")
-    column_id = os.environ.get("YOUGILE_COLUMN_ID", "").strip() or None
-    board_id = os.environ.get("YOUGILE_BOARD_ID", "").strip() or None
+    settings = load_yougile_settings()
+    yougile_token = settings["token"]
+    column_id = settings["column_id"] or None
+    board_id = settings["board_id"] or None
 
     missing = [
         name
@@ -57,7 +59,7 @@ def main() -> int:
 
     checklist_md = ""
     if not yougile_token:
-        print("YOUGILE_TOKEN is not set; creating PR without checklist.", file=sys.stderr)
+        print("YouGile token is not configured in yougile.env; creating PR without checklist.", file=sys.stderr)
     else:
         try:
             api = YOUGileAPI(yougile_token)
