@@ -22,6 +22,24 @@ def checklist_to_markdown(task: dict) -> str:
     return "\n\n" + "\n".join(checks)
 
 
+def markdown_checklist_to_items(body: str) -> list[dict[str, bool]]:
+    items: list[dict[str, bool]] = []
+    for line in body.splitlines():
+        match = re.match(r"^\s*[-*]\s+\[([ xX])\]\s+(.*\S)\s*$", line)
+        if not match:
+            continue
+        checked = match.group(1).lower() == "x"
+        title = match.group(2).strip()
+        if not title:
+            continue
+        items.append({"title": title, "checked": checked})
+    return items
+
+
+def normalize_checklist_title(title: str) -> str:
+    return re.sub(r"\s+", " ", title.strip().lower())
+
+
 def find_task_for_branch(
     api,
     branch: str,
