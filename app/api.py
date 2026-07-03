@@ -66,6 +66,20 @@ class YOUGileAPI:
     def get_tasks(self, column_id: str) -> list[YouGileItem]:
         return self._get("tasks", params={"columnId": column_id})
 
+    def list_tasks(
+        self,
+        column_id: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict:
+        params: dict[str, str | int] = {"limit": limit, "offset": offset}
+        if column_id:
+            params["columnId"] = column_id
+
+        url = f"{self.base_url}/task-list"
+        response = requests.get(url, headers=self.headers, params=params, timeout=30)
+        return self._handle_response(response)
+
     def get_task(self, task_id: str) -> dict:
         url = f"{self.base_url}/tasks/{task_id}"
         response = requests.get(url, headers=self.headers, timeout=30)
