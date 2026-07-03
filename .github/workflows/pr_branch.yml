@@ -1,0 +1,26 @@
+name: PR on branch create
+
+on:
+  create:
+    branches:
+      - 'feature/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create PR with YouGile checklist
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+          PR_BODY_PREFIX: Auto PR after branch creation
+        run: python3 -m app.create_pr

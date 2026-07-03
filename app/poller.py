@@ -1,7 +1,9 @@
+import subprocess
 import time
 
 from app.api import YOUGileAPI
-import subprocess
+from app.config import load_yougile_settings
+from app.github_pr import create_or_update_pull_request, get_github_repo
 from app.git_service import GitService
 from app.models import YouGileItem
 
@@ -51,6 +53,7 @@ class TaskPoller:
             except Exception:
                 sha = None
 
+            task_data = None
             try:
                 task_data = self.api.get_task(task.id)
                 current_desc = task_data.get("description", "") or ""
@@ -66,6 +69,28 @@ class TaskPoller:
                         print(f"Не удалось обновить задачу {task.id} в YouGile: {err}")
             except Exception as err:
                 print(f"Не удалось получить данные задачи {task.id} из YouGile: {err}")
+
+            settings = load_yougile_settings()
+            github_token = settings["github_token"]
+            github_repo = settings["github_repository"] or get_github_repo()
+            if not github_token:
+                print(
+                    "GITHUB_TOKEN не задан в yougile.env — PR будет создан через GitHub Actions.",
+                )
+            elif not github_repo:
+                print("Не удалось определить GITHUB_REPOSITORY для создания PR.")
+            else:
+                try:
+                    pr = create_or_update_pull_request(
+                        github_repo,
+                        branch_name,
+                        github_token,
+                        yougile_task=task_data,
+                        body_prefix="Auto PR after branch creation",
+                    )
+                    print(f"Создан или обновлён PR #{pr.get('number')} для ветки {branch_name}")
+                except Exception as err:
+                    print(f"Не удалось создать PR для ветки {branch_name}: {err}")
 
     def poll_once(self) -> None:
         tasks = self.api.get_tasks(self.column_id)

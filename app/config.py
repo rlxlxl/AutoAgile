@@ -12,6 +12,8 @@ ENV_KEYS = (
     "YOUGILE_BOARD_ID",
     "YOUGILE_COLUMN_ID",
     "YOUGILE_POLL_INTERVAL",
+    "GITHUB_TOKEN",
+    "GITHUB_REPOSITORY",
 )
 
 
@@ -68,6 +70,14 @@ def load_yougile_settings() -> dict[str, str]:
             os.environ.get("YOUGILE_POLL_INTERVAL", "").strip()
             or values.get("YOUGILE_POLL_INTERVAL", "10").strip()
             or "10"
+        ),
+        "github_token": (
+            os.environ.get("GITHUB_TOKEN", "").strip()
+            or values.get("GITHUB_TOKEN", "").strip()
+        ),
+        "github_repository": (
+            os.environ.get("GITHUB_REPOSITORY", "").strip()
+            or values.get("GITHUB_REPOSITORY", "").strip()
         ),
     }
 

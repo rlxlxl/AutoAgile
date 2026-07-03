@@ -45,11 +45,12 @@ jobs:
               print(resp.read().decode())
           PY
 
-      - name: Create PR with YouGile checklist
+      - name: Update PR checklist
         if: success()
         env:
           GITHUB_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.ref_name }}
+          PR_BODY_PREFIX: Auto PR after push
         run: python3 -m app.create_pr
 
       # - name: Create YouGile task (PR review)
