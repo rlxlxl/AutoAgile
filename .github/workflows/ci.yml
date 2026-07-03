@@ -23,7 +23,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{
               "title": "тесты упали",
-              "columnId": "24e33273-a286-44c2-a016-786354b70a04",
+              "columnId": "24e33273-a286-44c2-a016-786354b70a04", 
               "description": "Branch: ${{ github.ref_name }} | Commit: ${{ github.sha }}"
             }'
 
@@ -32,7 +32,7 @@ jobs:
         env:
           YOUGILE_TOKEN: ${{ secrets.YOUGILE_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          YOUGILE_COLUMN_ID: "0904c3b9-7078-4cfe-b547-794b30706260"
+          YOUGILE_COLUMN_ID: "0904c3b9-7078-4cfe-b547-794b30706260" #придумать что с этим делать
           BRANCH: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
         run: |
