@@ -42,25 +42,37 @@ def main() -> int:
     column_id = os.environ.get("YOUGILE_COLUMN_ID", "").strip() or None
     board_id = os.environ.get("YOUGILE_BOARD_ID", "").strip() or None
 
-    if not github_repo or not branch or not github_token or not yougile_token:
-        print("Missing required environment variables.", file=sys.stderr)
+    missing = [
+        name
+        for name, value in (
+            ("GITHUB_REPOSITORY", github_repo),
+            ("BRANCH/GITHUB_REF_NAME", branch),
+            ("GITHUB_TOKEN", github_token),
+        )
+        if not value
+    ]
+    if missing:
+        print(f"Missing required environment variables: {', '.join(missing)}", file=sys.stderr)
         return 1
 
     checklist_md = ""
-    try:
-        api = YOUGileAPI(yougile_token)
-        task = find_task_for_branch(api, branch, column_id=column_id, board_id=board_id)
-        if task:
-            checklist_md = checklist_to_markdown(task)
-            print(f"Found YouGile task {task.get('id')} with {checklist_md.count('- [')} checklist items.")
-        else:
-            print(
-                f"YouGile task for branch '{branch}' was not found "
-                f"(columnId={column_id}, boardId={board_id}).",
-                file=sys.stderr,
-            )
-    except Exception as error:
-        print(f"Failed to load YouGile checklist: {error}", file=sys.stderr)
+    if not yougile_token:
+        print("YOUGILE_TOKEN is not set; creating PR without checklist.", file=sys.stderr)
+    else:
+        try:
+            api = YOUGileAPI(yougile_token)
+            task = find_task_for_branch(api, branch, column_id=column_id, board_id=board_id)
+            if task:
+                checklist_md = checklist_to_markdown(task)
+                print(f"Found YouGile task {task.get('id')} with {checklist_md.count('- [')} checklist items.")
+            else:
+                print(
+                    f"YouGile task for branch '{branch}' was not found "
+                    f"(columnId={column_id}, boardId={board_id}).",
+                    file=sys.stderr,
+                )
+        except Exception as error:
+            print(f"Failed to load YouGile checklist: {error}", file=sys.stderr)
 
     body = "Auto PR after CI success" + checklist_md
     title = f"Auto PR: {branch} → dev"

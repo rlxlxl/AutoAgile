@@ -9,6 +9,9 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +38,7 @@ jobs:
         if: success()
         env:
           YOUGILE_TOKEN: ${{ secrets.YOUGILE_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           YOUGILE_COLUMN_ID: ${{ secrets.YOUGILE_COLUMN_ID }}
           YOUGILE_BOARD_ID: ${{ secrets.YOUGILE_BOARD_ID }}
           BRANCH: ${{ github.ref_name }}
