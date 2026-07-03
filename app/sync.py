@@ -65,8 +65,8 @@ def _build_checklist_payload(task: dict, pr_items: list[dict[str, bool]]) -> dic
                 continue
 
             updated_item = dict(item)
+            updated_item.pop("isChecked", None)
             updated_item["isCompleted"] = found["checked"]
-            updated_item["isChecked"] = found["checked"]
             updated_items.append(updated_item)
 
         updated_checklists.append({**checklist, "items": updated_items})
