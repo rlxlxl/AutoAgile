@@ -100,6 +100,9 @@ def load_webhook_settings() -> dict[str, str]:
         "github_token": pick("GITHUB_TOKEN", "GH_TOKEN"),
         "github_repo": pick("GITHUB_REPO", "GITHUB_REPOSITORY"),
         "github_webhook_secret": pick("GITHUB_WEBHOOK_SECRET"),
+        "gitlab_token": pick("GITLAB_TOKEN"),
+        "gitlab_project_id": pick("GITLAB_PROJECT_ID", "CI_PROJECT_ID"),
+        "gitlab_webhook_secret": pick("GITLAB_WEBHOOK_SECRET"),
         "yougile_webhook_secret": pick("YOUGILE_WEBHOOK_SECRET"),
     }
 

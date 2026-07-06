@@ -2,7 +2,7 @@
 
 AutoAgile связывает задачи в **YouGile** с репозиторием **GitHub** и поддерживает их
 в согласованном состоянии: по новым задачам создаются ветки и Pull Request'ы, а
-состояние чек-листов синхронизируется между YouGile и GitHub Pull Request в обе
+состояние чек-листов синхронизируется между YouGile и GitHub Pull Request в об
 стороны в реальном времени.
 
 ---
@@ -34,6 +34,8 @@ AutoAgile связывает задачи в **YouGile** с репозитори
 - отметка пункта в **YouGile** отражается в **GitHub Pull Request**.
 
 Синхронизация выполняется вживую через вебхуки в обоих направлениях.
+
+> **GitLab.com:** для работы с GitLab вместо (или параллельно с) GitHub см. [gitlab/README.md](gitlab/README.md).
 
 ---
 
@@ -240,7 +242,7 @@ flowchart LR
 app/
   main.py            # точка входа поллера
   poller.py          # опрос YouGile и создание веток
-  webhook_server.py  # FastAPI-сервер: /webhook/github, /webhook/yougile, /health
+  webhook_server.py  # FastAPI-сервер: /webhook/github, /webhook/gitlab, /webhook/yougile, /health
   webhook_sync.py    # сопоставление чек-листов и вычисление хешей состояний
   sync_guard.py      # защита от зацикливания (echo guard)
   api.py             # клиент YouGile API (get_task, update_task, create_task)
@@ -255,6 +257,12 @@ app/
 .github/workflows/
   ci.yml             # тесты и создание PR при пуше в feature/**
   sync.yml           # синхронизация чек-листа PR -> YouGile (временно отключено)
+gitlab/
+  client.py          # клиент GitLab API (Merge Requests, проверка вебхука)
+  create_mr.py       # создание MR с чек-листом (запускается в GitLab CI)
+  ci.yml             # pipeline GitLab CI
+  README.md          # инструкция по настройке GitLab.com
+.gitlab-ci.yml       # include gitlab/ci.yml
 .env                 # локальные настройки (в .gitignore, в репозиторий не попадает)
 .env.example         # шаблон настроек
 ```

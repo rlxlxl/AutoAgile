@@ -1,0 +1,52 @@
+stages:
+  - test
+  - create_mr
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^feature\/.*/
+    - when: never
+
+test:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install -r requirements.txt
+  after_script:
+    - |
+      if [ "$CI_JOB_STATUS" = "failed" ]; then
+        python3 - <<'PY'
+      from app.config import load_yougile_settings
+      import json, os, urllib.request
+
+      settings = load_yougile_settings()
+      payload = {
+          "title": "тесты упали",
+          "columnId": "24e33273-a286-44c2-a016-786354b70a04",
+          "description": f"Branch: {os.environ['CI_COMMIT_REF_NAME']} | Commit: {os.environ['CI_COMMIT_SHA']}",
+      }
+      req = urllib.request.Request(
+          "https://ru.yougile.com/api-v2/tasks",
+          data=json.dumps(payload).encode(),
+          headers={
+              "Authorization": f"Bearer {settings['token']}",
+              "Content-Type": "application/json",
+          },
+          method="POST",
+      )
+      with urllib.request.urlopen(req) as resp:
+          print(resp.read().decode())
+      PY
+      fi
+
+create_mr:
+  stage: create_mr
+  image: python:3.12-slim
+  needs:
+    - job: test
+  script:
+    - pip install -r requirements.txt
+    - python3 -m gitlab.create_mr
+  variables:
+    GITLAB_PROJECT_ID: $CI_PROJECT_ID
+    BRANCH: $CI_COMMIT_REF_NAME
