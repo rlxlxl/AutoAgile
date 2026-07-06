@@ -7,7 +7,7 @@ PR/MR в обе стороны в реальном времени
 
 Хостинг выбирается одной переменной `GIT_PROVIDER` (`github` или `gitlab`) — весь
 остальной код общий. Реализации провайдеров лежат в `app/providers/github` и
-`app/providers/gitlab` за единым интерфейсом `GitProvider`.
+`app/providers/gitlab` за единым интерфейсом `GitProvider`
 
 ---
 
