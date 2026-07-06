@@ -1,26 +1,30 @@
-name: Sync PR checklist to YouGile
-
-on:
-  pull_request:
-    types: [edited, synchronize, opened]
-
-jobs:
-  sync:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Sync PR checklist to YouGile
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-          BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: python3 -m app.sync
+# Временно отключено: синхронизация чек-листа PR -> YouGile теперь выполняется
+# живым вебхук-сервером (app/webhook_server.py, эндпоинт /webhook/github).
+# Файл оставлен для возможного возврата; удалить после проверки вебхуков.
+#
+# name: Sync PR checklist to YouGile
+#
+# on:
+#   pull_request:
+#     types: [edited, synchronize, opened]
+#
+# jobs:
+#   sync:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read
+#       pull-requests: read
+#
+#     steps:
+#       - uses: actions/checkout@v4
+#
+#       - name: Install dependencies
+#         run: pip install -r requirements.txt
+#
+#       - name: Sync PR checklist to YouGile
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#           GITHUB_REPOSITORY: ${{ github.repository }}
+#           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+#           BRANCH: ${{ github.event.pull_request.head.ref }}
+#         run: python3 -m app.sync

@@ -22,22 +22,6 @@ def checklist_to_markdown(task: dict) -> str:
     return "\n\n" + "\n".join(checks)
 
 
-def markdown_to_yougile_checklists(body: str, title: str = "Checklist") -> list[dict]:
-    """Build a YouGile ``checklists`` array from a Markdown checklist body."""
-    items = [
-        {"title": item["title"], "isCompleted": bool(item["checked"])}
-        for item in markdown_checklist_to_items(body)
-    ]
-    if not items:
-        return []
-    return [{"title": title, "items": items}]
-
-
-def issue_body_from_task(task: dict) -> str:
-    """Render a task's checklist as an Issue body (no leading blank lines)."""
-    return checklist_to_markdown(task).lstrip("\n")
-
-
 def markdown_checklist_to_items(body: str) -> list[dict[str, bool]]:
     items: list[dict[str, bool]] = []
     for line in body.splitlines():
@@ -54,14 +38,6 @@ def markdown_checklist_to_items(body: str) -> list[dict[str, bool]]:
 
 def normalize_checklist_title(title: str) -> str:
     return re.sub(r"\s+", " ", title.strip().lower())
-
-
-def parse_task_marker(title: str) -> str | None:
-    """Extract the YouGile task id from an Issue title like ``[<id>] Title``."""
-    if not title:
-        return None
-    match = re.search(r"\[([0-9a-fA-F][0-9a-fA-F\-]{3,})\]", title)
-    return match.group(1) if match else None
 
 
 def apply_checklist_states_to_markdown(

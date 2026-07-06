@@ -2,9 +2,7 @@ import time
 
 from app.api import YOUGileAPI
 import subprocess
-from app.checklist import issue_body_from_task
 from app.git_service import GitService
-from app.github_client import GitHubClient
 from app.models import YouGileItem
 
 
@@ -15,13 +13,11 @@ class TaskPoller:
         column_id: str,
         git_service: GitService | None = None,
         interval: int = 10,
-        github_client: GitHubClient | None = None,
     ):
         self.api = api
         self.column_id = column_id
         self.git_service = git_service or GitService()
         self.interval = interval
-        self.github_client = github_client
         self.known_tasks: set[str] = set()
         self._tasks_by_id: dict[str, YouGileItem] = {}
 
@@ -70,48 +66,6 @@ class TaskPoller:
                         print(f"Не удалось обновить задачу {task.id} в YouGile: {err}")
             except Exception as err:
                 print(f"Не удалось получить данные задачи {task.id} из YouGile: {err}")
-
-        self._ensure_linked_issue(task)
-
-    def _ensure_linked_issue(self, task: YouGileItem) -> None:
-        if self.github_client is None:
-            return
-
-        try:
-            task_data = self.api.get_task(task.id)
-        except Exception as err:
-            print(f"Не удалось получить данные задачи {task.id} для Issue: {err}")
-            return
-
-        current_desc = task_data.get("description", "") or ""
-        if "GitHub-Issue:" in current_desc:
-            return
-
-        try:
-            if self.github_client.find_issue_by_marker(task.id):
-                return
-        except Exception as err:
-            print(f"Не удалось проверить существующий Issue для {task.id}: {err}")
-            return
-
-        try:
-            issue = self.github_client.create_issue(
-                f"[{task.id}] {task.title}",
-                issue_body_from_task(task_data),
-            )
-        except Exception as err:
-            print(f"Не удалось создать GitHub Issue для задачи {task.id}: {err}")
-            return
-
-        number = issue.get("number")
-        print(f"Создан GitHub Issue #{number} для задачи {task.id}")
-
-        marker = f"GitHub-Issue: {self.github_client.repo}#{number}"
-        new_desc = current_desc + ("\n" if current_desc else "") + marker
-        try:
-            self.api.update_task(task.id, description=new_desc)
-        except Exception as err:
-            print(f"Не удалось записать ссылку на Issue в задачу {task.id}: {err}")
 
     def poll_once(self) -> None:
         tasks = self.api.get_tasks(self.column_id)

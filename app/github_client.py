@@ -5,7 +5,7 @@ import requests
 
 
 class GitHubClient:
-    """Minimal GitHub REST client for the Issues used by the webhook sync."""
+    """Minimal GitHub REST client for the Pull Requests used by the webhook sync."""
 
     base_url = "https://api.github.com"
 
@@ -28,44 +28,32 @@ class GitHubClient:
             f"GitHub request failed with status {response.status_code}: {response.text}"
         )
 
-    def get_issue(self, number: int | str) -> dict:
-        url = f"{self.base_url}/repos/{self.repo}/issues/{number}"
+    def get_pull(self, number: int | str) -> dict:
+        url = f"{self.base_url}/repos/{self.repo}/pulls/{number}"
         response = requests.get(url, headers=self.headers, timeout=30)
         return self._handle_response(response)
 
-    def update_issue_body(self, number: int | str, body: str) -> dict:
-        return self.update_issue(number, body=body)
-
-    def update_issue_title(self, number: int | str, title: str) -> dict:
-        return self.update_issue(number, title=title)
-
-    def update_issue(self, number: int | str, **fields) -> dict:
-        url = f"{self.base_url}/repos/{self.repo}/issues/{number}"
-        response = requests.patch(url, headers=self.headers, json=fields, timeout=30)
+    def update_pull_body(self, number: int | str, body: str) -> dict:
+        url = f"{self.base_url}/repos/{self.repo}/pulls/{number}"
+        response = requests.patch(url, headers=self.headers, json={"body": body}, timeout=30)
         return self._handle_response(response)
 
-    def create_issue(self, title: str, body: str = "") -> dict:
-        url = f"{self.base_url}/repos/{self.repo}/issues"
-        response = requests.post(
-            url, headers=self.headers, json={"title": title, "body": body}, timeout=30
-        )
-        return self._handle_response(response)
-
-    def find_issue_by_marker(self, task_id: str) -> dict | None:
-        """Find an issue whose title contains the ``[task_id]`` marker."""
-        query = f'repo:{self.repo} in:title "[{task_id}]"'
-        url = f"{self.base_url}/search/issues"
+    def find_pull_by_branch_prefix(self, prefix: str) -> dict | None:
+        """Find an open PR whose head branch name starts with ``prefix``."""
+        url = f"{self.base_url}/repos/{self.repo}/pulls"
         response = requests.get(
             url,
             headers=self.headers,
-            params={"q": query, "per_page": 20},
+            params={"state": "open", "per_page": 100},
             timeout=30,
         )
-        data = self._handle_response(response)
-        marker = f"[{task_id}]"
-        for item in data.get("items", []) or []:
-            if marker in (item.get("title") or ""):
-                return item
+        data = response.json() if 200 <= response.status_code < 300 else []
+        if not isinstance(data, list):
+            return None
+        for pull in data:
+            head_ref = ((pull.get("head") or {}).get("ref")) or ""
+            if head_ref.startswith(prefix):
+                return pull
         return None
 
 
