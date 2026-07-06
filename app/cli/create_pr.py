@@ -30,11 +30,36 @@ def main() -> int:
         return 1
 
     if not settings.get("provider_configured"):
+        missing: list[str] = []
+        if provider_name == "gitlab":
+            if not settings.get("gitlab_token"):
+                missing.append("GITLAB_TOKEN")
+            if not settings.get("gitlab_project_id"):
+                missing.append("GITLAB_PROJECT_ID / CI_PROJECT_ID")
+        else:
+            if not settings.get("github_token"):
+                missing.append("GITHUB_TOKEN")
+            if not settings.get("github_repo"):
+                missing.append("GITHUB_REPO / GITHUB_REPOSITORY")
+        hint = ", ".join(missing) if missing else "unknown"
         print(
-            f"Git provider '{provider_name}' is not configured "
-            "(check tokens / repo / project id).",
+            f"Git provider '{provider_name}' is not configured. Missing: {hint}.",
             file=sys.stderr,
         )
+        if provider_name == "gitlab" and not settings.get("gitlab_token"):
+            print(
+                "Add GITLAB_TOKEN in Settings → CI/CD → Variables "
+                "(Project Access Token, role Developer+, scope api). "
+                "CI_JOB_TOKEN is used as fallback when GITLAB_TOKEN is not set.",
+                file=sys.stderr,
+            )
+        if os.environ.get("CI"):
+            print(
+                f"CI debug: project_id={settings.get('gitlab_project_id')!r}, "
+                f"url={settings.get('gitlab_url')!r}, "
+                f"token_present={bool(settings.get('gitlab_token'))}",
+                file=sys.stderr,
+            )
         return 1
 
     provider = get_provider(settings)

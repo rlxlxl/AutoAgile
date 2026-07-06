@@ -1,10 +1,13 @@
 import os
+from urllib.parse import urlparse
 
 from dotenv import dotenv_values, load_dotenv
 
 from app.core.models import MonitorConfig
 
-load_dotenv()
+# In GitLab/GitHub CI all secrets come from pipeline variables, not .env files.
+if not os.environ.get("CI"):
+    load_dotenv()
 
 ENV_KEYS = (
     "YOUGILE_BEARER_TOKEN",
@@ -42,6 +45,59 @@ def _read_env_values() -> dict[str, str]:
 
 def _read_yougile_env_values() -> dict[str, str]:
     return _read_env_file(get_yougile_env_path())
+
+
+def _merged_env_values() -> dict[str, str]:
+    values = _read_yougile_env_values()
+    values.update(_read_env_values())
+    return values
+
+
+def _pick_env(*keys: str, values: dict[str, str] | None = None) -> str:
+    merged = values if values is not None else _merged_env_values()
+    for key in keys:
+        env_value = os.environ.get(key, "").strip()
+        if env_value:
+            return env_value
+    for key in keys:
+        file_value = merged.get(key, "").strip()
+        if file_value:
+            return file_value
+    return ""
+
+
+def normalize_gitlab_url(url: str) -> str:
+    """Return the GitLab API base URL (scheme + host), stripping project paths."""
+    cleaned = (url or "").strip().rstrip("/")
+    if not cleaned:
+        return "http://localhost:8929"
+    parsed = urlparse(cleaned)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return cleaned
+
+
+def get_git_provider() -> str:
+    return (_pick_env("GIT_PROVIDER") or "github").lower()
+
+
+def get_git_remote() -> str:
+    """Git remote name used by the poller when creating and pushing branches.
+
+    ``GIT_REMOTE`` overrides the default mapping: ``origin`` for GitHub,
+    ``gitlab`` for GitLab.
+    """
+    explicit = _pick_env("GIT_REMOTE")
+    if explicit:
+        return explicit
+    return "gitlab" if get_git_provider() == "gitlab" else "origin"
+
+
+def get_scm_token() -> str:
+    """Personal access token for the active Git hosting provider."""
+    if get_git_provider() == "gitlab":
+        return _pick_env("GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN", "CI_JOB_TOKEN")
+    return _pick_env("GITHUB_TOKEN", "GH_TOKEN")
 
 
 def load_yougile_settings() -> dict[str, str]:
@@ -83,32 +139,20 @@ def load_webhook_settings() -> dict[str, str]:
     The active Git hosting provider is selected via ``GIT_PROVIDER``
     (``github`` or ``gitlab``, default ``github``).
     """
-    values = _read_yougile_env_values()
-    values.update(_read_env_values())
-
-    def pick(*keys: str) -> str:
-        for key in keys:
-            env_value = os.environ.get(key, "").strip()
-            if env_value:
-                return env_value
-        for key in keys:
-            file_value = values.get(key, "").strip()
-            if file_value:
-                return file_value
-        return ""
-
+    merged = _merged_env_values()
     yougile = load_yougile_settings()
 
-    git_provider = (pick("GIT_PROVIDER") or "github").lower()
+    git_provider = get_git_provider()
 
-    github_token = pick("GITHUB_TOKEN", "GH_TOKEN")
-    github_repo = pick("GITHUB_REPO", "GITHUB_REPOSITORY")
-    github_webhook_secret = pick("GITHUB_WEBHOOK_SECRET")
+    github_token = _pick_env("GITHUB_TOKEN", "GH_TOKEN", values=merged)
+    github_repo = _pick_env("GITHUB_REPO", "GITHUB_REPOSITORY", values=merged)
+    github_webhook_secret = _pick_env("GITHUB_WEBHOOK_SECRET", values=merged)
 
-    gitlab_token = pick("GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN")
-    gitlab_url = pick("GITLAB_URL", "CI_SERVER_URL") or "http://localhost:8929"
-    gitlab_project_id = pick("GITLAB_PROJECT_ID", "CI_PROJECT_ID")
-    gitlab_webhook_token = pick("GITLAB_WEBHOOK_TOKEN")
+    gitlab_token = _pick_env("GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN", "CI_JOB_TOKEN", values=merged)
+    gitlab_url = normalize_gitlab_url(_pick_env("GITLAB_URL", "CI_SERVER_URL", values=merged))
+    gitlab_project_id = _pick_env("GITLAB_PROJECT_ID", "CI_PROJECT_ID", values=merged)
+    gitlab_webhook_token = _pick_env("GITLAB_WEBHOOK_TOKEN", values=merged)
+    git_remote = get_git_remote()
 
     if git_provider == "gitlab":
         provider_configured = bool(gitlab_token and gitlab_project_id)
@@ -122,6 +166,7 @@ def load_webhook_settings() -> dict[str, str]:
         "yougile_column_id": yougile["column_id"],
         "yougile_board_id": yougile["board_id"],
         "git_provider": git_provider,
+        "git_remote": git_remote,
         "github_token": github_token,
         "github_repo": github_repo,
         "github_webhook_secret": github_webhook_secret,
@@ -131,7 +176,7 @@ def load_webhook_settings() -> dict[str, str]:
         "gitlab_webhook_token": gitlab_webhook_token,
         "webhook_secret": webhook_secret,
         "provider_configured": provider_configured,
-        "yougile_webhook_secret": pick("YOUGILE_WEBHOOK_SECRET"),
+        "yougile_webhook_secret": _pick_env("YOUGILE_WEBHOOK_SECRET", values=merged),
     }
 
 
@@ -180,7 +225,7 @@ def load_bearer_token(api_factory) -> str:
     if token:
         api = api_factory(token)
         if api.validate_token():
-            print("Токен из .env проверен и работает.")
+            print("Токен из конфигурации проверен и работает.")
             return token
 
         print("Токен из .env не работает. Введите новый Bearer Token.")

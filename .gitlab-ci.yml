@@ -2,11 +2,13 @@
 # и создаёт/обновляет Merge Request с чек-листом из YouGile.
 #
 # Требуемые переменные (Settings -> CI/CD -> Variables):
-#   GITLAB_TOKEN          — Project/Group Access Token с scope "api" (роль Developer+)
+#   GITLAB_TOKEN          — Project Access Token с scope "api" (роль Developer+)
+#                         Если не задан, используется CI_JOB_TOKEN (нужно включить
+#                         Settings -> CI/CD -> Job token permissions -> create MR)
 #   YOUGILE_BEARER_TOKEN  — токен YouGile (для чек-листа), опционально
 #   YOUGILE_BOARD_ID      — доска YouGile, опционально
 #   YOUGILE_COLUMN_ID     — колонка YouGile, опционально
-# GITLAB_URL и GITLAB_PROJECT_ID подставляются автоматически из CI_SERVER_URL / CI_PROJECT_ID.
+# GITLAB_URL и GITLAB_PROJECT_ID берутся из CI_SERVER_URL / CI_PROJECT_ID автоматически.
 
 stages:
   - test
@@ -20,6 +22,9 @@ test-and-create-mr:
     GIT_PROVIDER: gitlab
     BRANCH: $CI_COMMIT_REF_NAME
     TARGET_BRANCH: dev
+    GITLAB_URL: $CI_SERVER_URL
+    GITLAB_PROJECT_ID: $CI_PROJECT_ID
   script:
     - pip install -r requirements.txt
+    - echo "CI_PROJECT_ID=${CI_PROJECT_ID} GITLAB_TOKEN set=$([ -n \"$GITLAB_TOKEN\" ] && echo yes || echo no)"
     - python3 -m app.cli.create_pr
