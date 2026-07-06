@@ -1,9 +1,13 @@
-# AutoAgile — двусторонняя синхронизация YouGile ↔ GitHub
+# AutoAgile — двусторонняя синхронизация YouGile ↔ GitHub / GitLab
 
-AutoAgile связывает задачи в **YouGile** с репозиторием **GitHub** и поддерживает их
-в согласованном состоянии: по новым задачам создаются ветки и Pull Request'ы, а
-состояние чек-листов синхронизируется между YouGile и GitHub Pull Request в обе
-стороны в реальном времени.
+AutoAgile связывает задачи в **YouGile** с репозиторием на **GitHub** или **GitLab** и
+поддерживает их в согласованном состоянии: по новым задачам создаются ветки и
+Pull Request / Merge Request, а состояние чек-листов синхронизируется между YouGile и
+PR/MR в обе стороны в реальном времени.
+
+Хостинг выбирается одной переменной `GIT_PROVIDER` (`github` или `gitlab`) — весь
+остальной код общий. Реализации провайдеров лежат в `app/providers/github` и
+`app/providers/gitlab` за единым интерфейсом `GitProvider`.
 
 ---
 
@@ -23,15 +27,15 @@ AutoAgile связывает задачи в **YouGile** с репозитори
 
 ## Назначение
 
-Каждая новая задача в YouGile порождает в GitHub две сущности:
+Каждая новая задача в YouGile порождает в репозитории две сущности:
 
 - **Ветку** вида `feature/<короткий-id>-<название>`;
-- **Pull Request** (из ветки в `dev`) с чек-листом задачи в теле.
+- **Pull Request / Merge Request** (из ветки в `dev`) с чек-листом задачи в теле.
 
 Далее состояние чек-листа синхронизируется автоматически:
 
-- отметка пункта в **GitHub Pull Request** отражается в **YouGile**;
-- отметка пункта в **YouGile** отражается в **GitHub Pull Request**.
+- отметка пункта в **PR/MR** отражается в **YouGile**;
+- отметка пункта в **YouGile** отражается в **PR/MR**.
 
 Синхронизация выполняется вживую через вебхуки в обоих направлениях.
 
@@ -43,9 +47,9 @@ AutoAgile связывает задачи в **YouGile** с репозитори
 
 | Компонент | Команда запуска | Назначение |
 | --- | --- | --- |
-| Поллер | `python -m app.main` | Периодически опрашивает колонку YouGile и создаёт ветку для каждой новой задачи. |
-| Вебхук-сервер | `uvicorn app.webhook_server:app --host 0.0.0.0 --port 8000` | Принимает вебхуки от GitHub и YouGile и синхронизирует чек-листы в реальном времени. |
-| GitHub Actions | выполняется в GitHub | При пуше в ветку `feature/**` запускает тесты и создаёт Pull Request с чек-листом из YouGile. |
+| Поллер | `python -m app.cli.main` | Периодически опрашивает колонку YouGile и создаёт ветку для каждой новой задачи. |
+| Вебхук-сервер | `uvicorn app.webhooks.server:app --host 0.0.0.0 --port 8000` | Принимает вебхуки от GitHub/GitLab и YouGile и синхронизирует чек-листы в реальном времени. |
+| CI (GitHub Actions / GitLab CI) | выполняется в CI | При пуше в ветку `feature/**` запускает тесты и создаёт PR/MR с чек-листом из YouGile. |
 
 ---
 
@@ -55,6 +59,9 @@ AutoAgile связывает задачи в **YouGile** с репозитори
 следующие значения:
 
 ```bash
+# --- Выбор хостинга ---
+GIT_PROVIDER=github                            # github | gitlab
+
 # --- YouGile ---
 YOUGILE_BEARER_TOKEN=токен_из_YouGile        # Настройки -> API -> создать ключ
 YOUGILE_PROJECT_ID=id_проекта
@@ -62,14 +69,23 @@ YOUGILE_BOARD_ID=id_доски
 YOUGILE_COLUMN_ID=id_колонки                  # колонка, за которой ведётся наблюдение
 YOUGILE_POLL_INTERVAL=10                      # период опроса в секундах
 
-# --- GitHub ---
+# --- GitHub (если GIT_PROVIDER=github) ---
 GITHUB_TOKEN=ghp_личный_токен                 # Personal Access Token со scope "repo"
 GITHUB_REPO=owner/repo                         # например: rlxlxl/AutoAgile
-
-# --- Секреты вебхуков ---
 GITHUB_WEBHOOK_SECRET=произвольная_строка     # та же строка указывается в настройках вебхука GitHub
+
+# --- GitLab (если GIT_PROVIDER=gitlab) ---
+GITLAB_TOKEN=glpat_личный_токен               # Personal/Project Access Token со scope "api"
+GITLAB_URL=http://localhost:8929               # адрес self-hosted GitLab
+GITLAB_PROJECT_ID=42                           # числовой ID проекта или "group%2Fproject"
+GITLAB_WEBHOOK_TOKEN=произвольная_строка      # та же строка в поле Secret token вебхука GitLab
+
+# --- Секрет вебхуков YouGile ---
 YOUGILE_WEBHOOK_SECRET=                        # должно оставаться пустым (см. примечание)
 ```
+
+> Активен только один провайдер за раз — тот, что указан в `GIT_PROVIDER`. Заполнять
+> нужно лишь блок соответствующего хостинга.
 
 > **Примечание о `YOUGILE_WEBHOOK_SECRET`.** YouGile не подписывает свои вебхуки.
 > Если задать это значение, сервер будет отклонять все запросы от YouGile с ответом
@@ -82,7 +98,7 @@ YOUGILE_WEBHOOK_SECRET=                        # должно оставатьс
 ### Получение значений YouGile
 
 - **Токен:** YouGile → Настройки → раздел API.
-- **project / board / column ID:** при первом запуске `python -m app.main` открывается
+- **project / board / column ID:** при первом запуске `python -m app.cli.main` открывается
   интерактивное меню выбора проекта, доски и колонки, которое сохраняет эти
   идентификаторы в `.env`. Альтернативно — через API:
   `GET https://ru.yougile.com/api-v2/tasks?columnId=<id>` (поле `id` у объектов).
@@ -107,7 +123,7 @@ pip install -r requirements.txt
 
 ```bash
 source venv/bin/activate
-uvicorn app.webhook_server:app --host 0.0.0.0 --port 8000
+uvicorn app.webhooks.server:app --host 0.0.0.0 --port 8000
 ```
 
 Проверка: обращение к `http://localhost:8000/health` должно возвращать
@@ -117,7 +133,7 @@ uvicorn app.webhook_server:app --host 0.0.0.0 --port 8000
 
 ```bash
 source venv/bin/activate
-python -m app.main
+python -m app.cli.main
 ```
 
 ### 5. Публикация сервера в интернет (терминал №3)
@@ -147,6 +163,24 @@ ngrok выдаёт адрес вида `https://xxxx.ngrok-free.dev` — дал�
 - **Secret:** значение `GITHUB_WEBHOOK_SECRET`
 - **Which events:** «Let me select individual events» → отметить **Pull requests**
 - Сохранить.
+
+### GitLab
+
+Проект → **Settings → Webhooks → Add new webhook**:
+
+- **URL:** `https://<host>/webhook/gitlab`
+- **Secret token:** значение `GITLAB_WEBHOOK_TOKEN`
+- **Trigger:** отметить **Merge request events**
+- Сохранить.
+
+> **Локальный GitLab и приватная сеть.** По умолчанию GitLab блокирует вебхуки на
+> localhost / приватные адреса. Если вебхук-сервер и ngrok крутятся локально, включите
+> **Admin → Settings → Network → Outbound requests → «Allow requests to the local network
+> from webhooks and integrations»**.
+>
+> **Токен для CI.** `CI_JOB_TOKEN` не может создавать Merge Request. Заведите Project
+> Access Token (Settings → Access Tokens, роль Developer+, scope `api`) и положите его в
+> **Settings → CI/CD → Variables** как `GITLAB_TOKEN`.
 
 ### YouGile
 
@@ -238,25 +272,30 @@ flowchart LR
 
 ```
 app/
-  main.py            # точка входа поллера
-  poller.py          # опрос YouGile и создание веток
-  webhook_server.py  # FastAPI-сервер: /webhook/github, /webhook/yougile, /health
-  webhook_sync.py    # сопоставление чек-листов и вычисление хешей состояний
-  sync_guard.py      # защита от зацикливания (echo guard)
-  api.py             # клиент YouGile API (get_task, update_task, create_task)
-  github_client.py   # клиент GitHub API (Pull Requests, проверка подписи)
-  checklist.py       # конвертация Markdown <-> чек-лист YouGile, поиск задачи по ветке
-  config.py          # чтение настроек из .env / yougile.env / окружения
-  git_service.py     # создание и пуш веток
-  create_pr.py       # создание PR с чек-листом (запускается в CI)
-  sync.py            # синхронизация чек-листа PR -> YouGile (устаревшее, замещено вебхуком)
-  menu.py            # интерактивный выбор проекта/доски/колонки
-  models.py          # датаклассы
+  core/                # провайдеро-независимая логика
+    api.py             # клиент YouGile API (get_task, update_task, create_task)
+    checklist.py       # конвертация Markdown <-> чек-лист YouGile, поиск задачи по ветке
+    checklist_sync.py  # сопоставление чек-листов и вычисление хешей состояний
+    sync_guard.py      # защита от зацикливания (echo guard)
+    config.py          # чтение настроек из .env / yougile.env / окружения
+    git_service.py     # создание и пуш веток
+    poller.py          # опрос YouGile и создание веток
+    models.py          # датаклассы
+  providers/           # адаптеры хостинга за единым интерфейсом
+    base.py            # GitProvider (ABC) + PullRequest/WebhookEvent + get_provider()
+    github/client.py   # GitHubProvider (Pull Requests, подпись X-Hub-Signature-256)
+    gitlab/client.py   # GitLabProvider (Merge Requests, токен X-Gitlab-Token)
+  webhooks/
+    server.py          # FastAPI: /webhook/scm, /webhook/github, /webhook/gitlab, /webhook/yougile, /health
+  cli/
+    main.py            # точка входа поллера
+    menu.py            # интерактивный выбор проекта/доски/колонки
+    create_pr.py       # создание PR/MR с чек-листом (запускается в CI)
 .github/workflows/
-  ci.yml             # тесты и создание PR при пуше в feature/**
-  sync.yml           # синхронизация чек-листа PR -> YouGile (временно отключено)
-.env                 # локальные настройки (в .gitignore, в репозиторий не попадает)
-.env.example         # шаблон настроек
+  ci.yml               # тесты и создание PR при пуше в feature/** (GIT_PROVIDER=github)
+.gitlab-ci.yml         # тесты и создание MR при пуше в feature/** (GIT_PROVIDER=gitlab)
+.env                   # локальные настройки (в .gitignore, в репозиторий не попадает)
+.env.example           # шаблон настроек
 ```
 
 ---
@@ -264,5 +303,5 @@ app/
 ## Требования
 
 - Python 3.10+ (используется синтаксис `str | None`)
-- Учётные записи и токены YouGile и GitHub
+- Токен YouGile и токен выбранного хостинга (GitHub **или** GitLab)
 - ngrok или иной способ предоставить серверу публичный HTTPS-адрес

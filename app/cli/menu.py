@@ -1,7 +1,7 @@
 import sys
 
-from app.api import YOUGileAPI
-from app.models import MonitorConfig, YouGileItem
+from app.core.api import YOUGileAPI
+from app.core.models import MonitorConfig, YouGileItem
 
 
 def _print_items(items: list[YouGileItem], label: str) -> None:

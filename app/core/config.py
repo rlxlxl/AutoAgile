@@ -2,7 +2,7 @@ import os
 
 from dotenv import dotenv_values, load_dotenv
 
-from app.models import MonitorConfig
+from app.core.models import MonitorConfig
 
 load_dotenv()
 
@@ -15,16 +15,19 @@ ENV_KEYS = (
 )
 
 
+def _project_root() -> str:
+    # this file lives in <root>/app/core/config.py -> walk up three levels
+    core_dir = os.path.dirname(os.path.abspath(__file__))
+    app_dir = os.path.dirname(core_dir)
+    return os.path.dirname(app_dir)
+
+
 def get_env_path() -> str:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.dirname(current_dir)
-    return os.path.join(root_dir, ".env")
+    return os.path.join(_project_root(), ".env")
 
 
 def get_yougile_env_path() -> str:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.dirname(current_dir)
-    return os.path.join(root_dir, "yougile.env")
+    return os.path.join(_project_root(), "yougile.env")
 
 
 def _read_env_file(path: str) -> dict[str, str]:
@@ -73,10 +76,12 @@ def load_yougile_settings() -> dict[str, str]:
 
 
 def load_webhook_settings() -> dict[str, str]:
-    """Load settings needed by the two-way webhook sync server.
+    """Load settings needed by the two-way sync (webhook server and CI create_pr).
 
     Values are read from the environment first, then from ``.env`` /
     ``yougile.env`` as a fallback, so deployments can override via real env vars.
+    The active Git hosting provider is selected via ``GIT_PROVIDER``
+    (``github`` or ``gitlab``, default ``github``).
     """
     values = _read_yougile_env_values()
     values.update(_read_env_values())
@@ -93,13 +98,39 @@ def load_webhook_settings() -> dict[str, str]:
         return ""
 
     yougile = load_yougile_settings()
+
+    git_provider = (pick("GIT_PROVIDER") or "github").lower()
+
+    github_token = pick("GITHUB_TOKEN", "GH_TOKEN")
+    github_repo = pick("GITHUB_REPO", "GITHUB_REPOSITORY")
+    github_webhook_secret = pick("GITHUB_WEBHOOK_SECRET")
+
+    gitlab_token = pick("GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN")
+    gitlab_url = pick("GITLAB_URL", "CI_SERVER_URL") or "http://localhost:8929"
+    gitlab_project_id = pick("GITLAB_PROJECT_ID", "CI_PROJECT_ID")
+    gitlab_webhook_token = pick("GITLAB_WEBHOOK_TOKEN")
+
+    if git_provider == "gitlab":
+        provider_configured = bool(gitlab_token and gitlab_project_id)
+        webhook_secret = gitlab_webhook_token
+    else:
+        provider_configured = bool(github_token and github_repo)
+        webhook_secret = github_webhook_secret
+
     return {
         "yougile_token": yougile["token"],
         "yougile_column_id": yougile["column_id"],
         "yougile_board_id": yougile["board_id"],
-        "github_token": pick("GITHUB_TOKEN", "GH_TOKEN"),
-        "github_repo": pick("GITHUB_REPO", "GITHUB_REPOSITORY"),
-        "github_webhook_secret": pick("GITHUB_WEBHOOK_SECRET"),
+        "git_provider": git_provider,
+        "github_token": github_token,
+        "github_repo": github_repo,
+        "github_webhook_secret": github_webhook_secret,
+        "gitlab_token": gitlab_token,
+        "gitlab_url": gitlab_url,
+        "gitlab_project_id": gitlab_project_id,
+        "gitlab_webhook_token": gitlab_webhook_token,
+        "webhook_secret": webhook_secret,
+        "provider_configured": provider_configured,
         "yougile_webhook_secret": pick("YOUGILE_WEBHOOK_SECRET"),
     }
 

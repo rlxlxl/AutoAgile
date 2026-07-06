@@ -1,9 +1,9 @@
+import subprocess
 import time
 
-from app.api import YOUGileAPI
-import subprocess
-from app.git_service import GitService
-from app.models import YouGileItem
+from app.core.api import YOUGileAPI
+from app.core.git_service import GitService
+from app.core.models import YouGileItem
 
 
 class TaskPoller:

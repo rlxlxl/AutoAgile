@@ -4,35 +4,31 @@ import logging
 
 from fastapi import FastAPI, Request
 
-from app.api import YOUGileAPI
-from app.checklist import find_task_for_branch, markdown_checklist_to_items
-from app.config import load_webhook_settings
-from app.github_client import GitHubClient, verify_signature
-from app.sync_guard import guard
-from app.webhook_sync import (
-    apply_yougile_to_github,
+from app.core.api import YOUGileAPI
+from app.core.checklist import find_task_for_branch, markdown_checklist_to_items
+from app.core.checklist_sync import (
+    apply_yougile_to_markdown,
     build_yougile_checklist_payload,
     checklist_state_hash,
     markdown_states_by_title,
     yougile_states_by_title,
 )
+from app.core.config import load_webhook_settings
+from app.core.sync_guard import guard
+from app.providers.base import get_provider
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("webhook_sync")
 
-app = FastAPI(title="GitHub PR <-> YouGile checklist sync")
+app = FastAPI(title="SCM (GitHub/GitLab) <-> YouGile checklist sync")
 
 settings = load_webhook_settings()
 yougile_api = YOUGileAPI(settings["yougile_token"]) if settings["yougile_token"] else None
-github_client = (
-    GitHubClient(settings["github_token"], settings["github_repo"])
-    if settings["github_token"] and settings["github_repo"]
-    else None
-)
+provider = get_provider(settings) if settings.get("provider_configured") else None
 
 
 def _resolve_task_by_branch(branch: str) -> dict | None:
-    """Resolve a YouGile task from a PR head branch (feature/<shortId>-...)."""
+    """Resolve a YouGile task from a PR/MR source branch (feature/<shortId>-...)."""
     return find_task_for_branch(
         yougile_api,
         branch,
@@ -61,47 +57,42 @@ def _extract_yougile_task_ids(payload) -> list[str]:
 def health() -> dict:
     return {
         "status": "ok",
+        "provider": settings.get("git_provider"),
         "yougile": bool(yougile_api),
-        "github": bool(github_client),
+        "scm": bool(provider),
     }
 
 
-@app.post("/webhook/github")
-async def webhook_github(request: Request) -> dict:
+async def _handle_scm_webhook(request: Request) -> dict:
+    """Direction: PR/MR checklist edit -> YouGile task checklist."""
     raw_body = await request.body()
-    signature = request.headers.get("X-Hub-Signature-256")
-    if not verify_signature(settings["github_webhook_secret"], raw_body, signature):
+    if not provider.verify_webhook(settings["webhook_secret"], raw_body, request.headers):
         return {"skipped": "invalid_signature"}
 
     if yougile_api is None:
         return {"skipped": "yougile_not_configured"}
 
     payload = await request.json()
+    event = provider.parse_webhook(payload)
+    if event is None:
+        return {"skipped": "not_a_merge_request"}
 
-    pull = payload.get("pull_request")
-    if not isinstance(pull, dict):
-        return {"skipped": "not_a_pull_request"}
-
-    if payload.get("action") not in ("opened", "edited"):
+    if event.action not in ("opened", "updated"):
         return {"skipped": "action_ignored"}
 
-    number = pull.get("number")
-    branch = (pull.get("head") or {}).get("ref") or ""
-    body = pull.get("body") or ""
-
-    md_items = markdown_checklist_to_items(body)
+    md_items = markdown_checklist_to_items(event.body)
     if not md_items:
         return {"skipped": "no_checklist_items"}
 
     md_states = markdown_states_by_title(md_items)
     incoming_hash = checklist_state_hash(md_states)
-    if guard.seen("github", str(number), incoming_hash):
-        logger.info("Ignoring echo GitHub webhook for PR #%s", number)
+    if guard.seen("scm", event.number, incoming_hash):
+        logger.info("Ignoring echo SCM webhook for PR/MR #%s", event.number)
         return {"skipped": "echo"}
 
-    task = _resolve_task_by_branch(branch)
+    task = _resolve_task_by_branch(event.branch)
     if not task:
-        return {"skipped": "task_not_found", "branch": branch}
+        return {"skipped": "task_not_found", "branch": event.branch}
 
     task_payload = build_yougile_checklist_payload(task, md_states)
     if not task_payload:
@@ -112,12 +103,35 @@ async def webhook_github(request: Request) -> dict:
         yougile_states_by_title({"checklists": task_payload["checklists"]})
     )
     guard.remember("yougile", task["id"], resulting_hash)
-    logger.info("Synced GitHub PR #%s -> YouGile task %s", number, task["id"])
+    logger.info("Synced SCM PR/MR #%s -> YouGile task %s", event.number, task["id"])
     return {"status": "synced", "task_id": task["id"]}
+
+
+@app.post("/webhook/scm")
+async def webhook_scm(request: Request) -> dict:
+    if provider is None:
+        return {"skipped": "not_configured"}
+    return await _handle_scm_webhook(request)
+
+
+@app.post("/webhook/github")
+async def webhook_github(request: Request) -> dict:
+    """Alias kept for backwards compatibility with existing GitHub webhooks."""
+    if provider is None:
+        return {"skipped": "not_configured"}
+    return await _handle_scm_webhook(request)
+
+
+@app.post("/webhook/gitlab")
+async def webhook_gitlab(request: Request) -> dict:
+    if provider is None:
+        return {"skipped": "not_configured"}
+    return await _handle_scm_webhook(request)
 
 
 @app.post("/webhook/yougile")
 async def webhook_yougile(request: Request) -> dict:
+    """Direction: YouGile task checklist -> PR/MR body."""
     raw_body = await request.body()
     secret = settings["yougile_webhook_secret"]
     if secret:
@@ -129,7 +143,7 @@ async def webhook_yougile(request: Request) -> dict:
         if not hmac.compare_digest(expected, provided):
             return {"skipped": "invalid_signature"}
 
-    if yougile_api is None or github_client is None:
+    if yougile_api is None or provider is None:
         return {"skipped": "not_configured"}
 
     payload = await request.json()
@@ -158,22 +172,21 @@ async def webhook_yougile(request: Request) -> dict:
             continue
 
         prefix = f"feature/{task_id.split('-')[0]}-"
-        pull = github_client.find_pull_by_branch_prefix(prefix)
+        pull = provider.find_pr_by_branch_prefix(prefix)
         if not pull:
             results.append({"task_id": task_id, "skipped": "pr_not_found"})
             continue
 
-        number = pull.get("number")
-        current_body = pull.get("body") or ""
-        new_body = apply_yougile_to_github(current_body, task)
+        current_body = pull.body or ""
+        new_body = apply_yougile_to_markdown(current_body, task)
         if new_body == current_body:
-            results.append({"task_id": task_id, "number": number, "status": "noop"})
+            results.append({"task_id": task_id, "number": pull.number, "status": "noop"})
             continue
 
-        github_client.update_pull_body(number, new_body)
+        provider.update_pr(pull.number, body=new_body)
         new_states = markdown_states_by_title(markdown_checklist_to_items(new_body))
-        guard.remember("github", str(number), checklist_state_hash(new_states))
-        logger.info("Synced YouGile task %s -> GitHub PR #%s", task_id, number)
-        results.append({"task_id": task_id, "number": number, "status": "synced"})
+        guard.remember("scm", pull.number, checklist_state_hash(new_states))
+        logger.info("Synced YouGile task %s -> SCM PR/MR #%s", task_id, pull.number)
+        results.append({"task_id": task_id, "number": pull.number, "status": "synced"})
 
     return {"results": results}

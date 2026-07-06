@@ -1,7 +1,7 @@
 import hashlib
 import json
 
-from app.checklist import (
+from app.core.checklist import (
     apply_checklist_states_to_markdown,
     normalize_checklist_title,
 )
@@ -84,6 +84,10 @@ def build_yougile_checklist_payload(
     return {"checklists": updated_checklists}
 
 
-def apply_yougile_to_github(body: str, task: dict) -> str:
-    """Return the issue body rewritten to reflect YouGile checklist states."""
+def apply_yougile_to_markdown(body: str, task: dict) -> str:
+    """Return the PR/MR body rewritten to reflect YouGile checklist states."""
     return apply_checklist_states_to_markdown(body, yougile_states_by_title(task))
+
+
+# Backwards-compatible alias (previously named for GitHub only).
+apply_yougile_to_github = apply_yougile_to_markdown

@@ -1,0 +1,25 @@
+# GitLab CI/CD: при пуше в ветку feature/** ставит зависимости, гоняет тесты
+# и создаёт/обновляет Merge Request с чек-листом из YouGile.
+#
+# Требуемые переменные (Settings -> CI/CD -> Variables):
+#   GITLAB_TOKEN          — Project/Group Access Token с scope "api" (роль Developer+)
+#   YOUGILE_BEARER_TOKEN  — токен YouGile (для чек-листа), опционально
+#   YOUGILE_BOARD_ID      — доска YouGile, опционально
+#   YOUGILE_COLUMN_ID     — колонка YouGile, опционально
+# GITLAB_URL и GITLAB_PROJECT_ID подставляются автоматически из CI_SERVER_URL / CI_PROJECT_ID.
+
+stages:
+  - test
+
+test-and-create-mr:
+  stage: test
+  image: python:3.11
+  rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^feature\//'
+  variables:
+    GIT_PROVIDER: gitlab
+    BRANCH: $CI_COMMIT_REF_NAME
+    TARGET_BRANCH: dev
+  script:
+    - pip install -r requirements.txt
+    - python3 -m app.cli.create_pr

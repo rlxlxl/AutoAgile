@@ -1,8 +1,9 @@
 import sys
 
-from app.api import YOUGileAPI
-from app import config, menu
-from app.poller import TaskPoller
+from app.core import config
+from app.core.api import YOUGileAPI
+from app.core.poller import TaskPoller
+from app.cli import menu
 
 
 def main() -> None:

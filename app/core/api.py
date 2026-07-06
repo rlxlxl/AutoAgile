@@ -1,6 +1,6 @@
 import requests
 
-from app.models import YouGileItem
+from app.core.models import YouGileItem
 
 
 class YOUGileAPI:
