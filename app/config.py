@@ -72,6 +72,38 @@ def load_yougile_settings() -> dict[str, str]:
     }
 
 
+def load_webhook_settings() -> dict[str, str]:
+    """Load settings needed by the two-way webhook sync server.
+
+    Values are read from the environment first, then from ``.env`` /
+    ``yougile.env`` as a fallback, so deployments can override via real env vars.
+    """
+    values = _read_yougile_env_values()
+    values.update(_read_env_values())
+
+    def pick(*keys: str) -> str:
+        for key in keys:
+            env_value = os.environ.get(key, "").strip()
+            if env_value:
+                return env_value
+        for key in keys:
+            file_value = values.get(key, "").strip()
+            if file_value:
+                return file_value
+        return ""
+
+    yougile = load_yougile_settings()
+    return {
+        "yougile_token": yougile["token"],
+        "yougile_column_id": yougile["column_id"],
+        "yougile_board_id": yougile["board_id"],
+        "github_token": pick("GITHUB_TOKEN", "GH_TOKEN"),
+        "github_repo": pick("GITHUB_REPO", "GITHUB_REPOSITORY"),
+        "github_webhook_secret": pick("GITHUB_WEBHOOK_SECRET"),
+        "yougile_webhook_secret": pick("YOUGILE_WEBHOOK_SECRET"),
+    }
+
+
 def _write_env_values(values: dict[str, str]) -> None:
     env_path = get_env_path()
     merged = _read_env_values()

@@ -22,6 +22,22 @@ def checklist_to_markdown(task: dict) -> str:
     return "\n\n" + "\n".join(checks)
 
 
+def markdown_to_yougile_checklists(body: str, title: str = "Checklist") -> list[dict]:
+    """Build a YouGile ``checklists`` array from a Markdown checklist body."""
+    items = [
+        {"title": item["title"], "isCompleted": bool(item["checked"])}
+        for item in markdown_checklist_to_items(body)
+    ]
+    if not items:
+        return []
+    return [{"title": title, "items": items}]
+
+
+def issue_body_from_task(task: dict) -> str:
+    """Render a task's checklist as an Issue body (no leading blank lines)."""
+    return checklist_to_markdown(task).lstrip("\n")
+
+
 def markdown_checklist_to_items(body: str) -> list[dict[str, bool]]:
     items: list[dict[str, bool]] = []
     for line in body.splitlines():
@@ -38,6 +54,41 @@ def markdown_checklist_to_items(body: str) -> list[dict[str, bool]]:
 
 def normalize_checklist_title(title: str) -> str:
     return re.sub(r"\s+", " ", title.strip().lower())
+
+
+def parse_task_marker(title: str) -> str | None:
+    """Extract the YouGile task id from an Issue title like ``[<id>] Title``."""
+    if not title:
+        return None
+    match = re.search(r"\[([0-9a-fA-F][0-9a-fA-F\-]{3,})\]", title)
+    return match.group(1) if match else None
+
+
+def apply_checklist_states_to_markdown(
+    body: str,
+    states_by_title: dict[str, bool],
+) -> str:
+    """Rewrite ``- [ ]`` / ``- [x]`` lines in ``body`` to match YouGile states.
+
+    Items are matched by normalized text. Lines whose title is not present in
+    ``states_by_title`` are left untouched, so any non-checklist content in the
+    body is preserved verbatim.
+    """
+    line_pattern = re.compile(r"^(\s*[-*]\s+\[)([ xX])(\]\s+)(.*\S)(\s*)$")
+
+    def _replace(match: re.Match) -> str:
+        prefix, _mark, middle, title, trailing = match.groups()
+        normalized = normalize_checklist_title(title)
+        if normalized not in states_by_title:
+            return match.group(0)
+        mark = "x" if states_by_title[normalized] else " "
+        return f"{prefix}{mark}{middle}{title}{trailing}"
+
+    updated_lines = [line_pattern.sub(_replace, line) for line in body.splitlines()]
+    result = "\n".join(updated_lines)
+    if body.endswith("\n"):
+        result += "\n"
+    return result
 
 
 def find_task_for_branch(

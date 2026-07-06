@@ -85,6 +85,23 @@ class YOUGileAPI:
         response = requests.get(url, headers=self.headers, timeout=30)
         return self._handle_response(response)
 
+    def create_task(
+        self,
+        title: str,
+        column_id: str,
+        description: str | None = None,
+        checklists: list | None = None,
+    ) -> dict:
+        payload: dict = {"title": title, "columnId": column_id}
+        if description:
+            payload["description"] = description
+        if checklists:
+            payload["checklists"] = checklists
+
+        url = f"{self.base_url}/tasks"
+        response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+        return self._handle_response(response)
+
     def update_task(self, task_id: str, **fields) -> dict:
         url = f"{self.base_url}/tasks/{task_id}"
         response = requests.patch(url, headers=self.headers, json=fields, timeout=30)

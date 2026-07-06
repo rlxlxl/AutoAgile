@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -8,6 +9,17 @@ import urllib.request
 from app.api import YOUGileAPI
 from app.checklist import checklist_to_markdown, find_task_for_branch
 from app.config import load_yougile_settings
+
+
+def _linked_issue_number(task: dict, repo: str) -> str | None:
+    """Extract the linked GitHub issue number from a task description.
+
+    The poller writes ``GitHub-Issue: owner/repo#N`` into the task description
+    when it auto-creates the issue, so a merged PR can auto-close that issue.
+    """
+    description = task.get("description", "") or ""
+    match = re.search(r"GitHub-Issue:\s*\S*?#(\d+)", description)
+    return match.group(1) if match else None
 
 
 def _github_request(method: str, url: str, token: str, payload: dict | None = None) -> dict:
@@ -58,6 +70,7 @@ def main() -> int:
         return 1
 
     checklist_md = ""
+    closes_md = ""
     if not yougile_token:
         print("YouGile token is not configured in yougile.env; creating PR without checklist.", file=sys.stderr)
     else:
@@ -67,6 +80,10 @@ def main() -> int:
             if task:
                 checklist_md = checklist_to_markdown(task)
                 print(f"Found YouGile task {task.get('id')} with {checklist_md.count('- [')} checklist items.")
+                issue_number = _linked_issue_number(task, github_repo)
+                if issue_number:
+                    closes_md = f"\n\nCloses #{issue_number}"
+                    print(f"Linking PR to issue #{issue_number}.")
             else:
                 print(
                     f"YouGile task for branch '{branch}' was not found "
@@ -76,7 +93,7 @@ def main() -> int:
         except Exception as error:
             print(f"Failed to load YouGile checklist: {error}", file=sys.stderr)
 
-    body = "Auto PR after CI success" + checklist_md
+    body = "Auto PR after CI success" + closes_md + checklist_md
     title = f"Auto PR: {branch} → dev"
 
     try:
