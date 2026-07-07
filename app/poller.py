@@ -1,7 +1,6 @@
 import time
 
 from app.api import YOUGileAPI
-import subprocess
 from app.git_service import GitService
 from app.models import YouGileItem
 
@@ -43,13 +42,7 @@ class TaskPoller:
         except Exception as error:
             print(f"Не удалось создать ветку для задачи {task.id}: {error}")
         else:
-            sha = None
-            try:
-                res = subprocess.run(["git", "rev-parse", "--verify", "HEAD"], capture_output=True, text=True)
-                if res.returncode == 0:
-                    sha = res.stdout.strip()
-            except Exception:
-                sha = None
+            sha = self.git_service.current_head_sha()
 
             try:
                 task_data = self.api.get_task(task.id)

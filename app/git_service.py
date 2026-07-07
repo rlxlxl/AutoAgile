@@ -1,11 +1,15 @@
+import os
 import re
 import subprocess
 import unicodedata
 
 
 class GitService:
-    def __init__(self, base_branch: str = "dev"):
+    def __init__(self, base_branch: str = "dev", repo_path: str | None = None):
         self.base_branch = base_branch
+        self.repo_path = (
+            os.path.abspath(os.path.expanduser(repo_path)) if repo_path else None
+        )
 
     @staticmethod
     def slugify(title: str, max_length: int = 40) -> str:
@@ -29,6 +33,7 @@ class GitService:
     def _run_git(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess:
         result = subprocess.run(
             ["git", *args],
+            cwd=self.repo_path,
             check=False,
             capture_output=True,
             text=True,
@@ -53,9 +58,16 @@ class GitService:
         )
         return remote.returncode == 0
 
+    def current_head_sha(self) -> str | None:
+        result = self._run_git(["rev-parse", "--verify", "HEAD"], check=False)
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() or None
+
     def create_and_push_branch(self, branch_name: str) -> None:
         if not self._is_git_repo():
-            raise RuntimeError("Текущая директория не является git-репозиторием.")
+            location = self.repo_path or "текущая директория"
+            raise RuntimeError(f"{location} не является git-репозиторием.")
 
         if self._branch_exists(branch_name):
             print(f"Ветка уже существует: {branch_name}")
@@ -66,4 +78,5 @@ class GitService:
         self._run_git(["pull", "origin", self.base_branch])
         self._run_git(["checkout", "-b", branch_name])
         self._run_git(["push", "-u", "origin", branch_name])
-        print(f"Создана и отправлена ветка: {branch_name}")
+        target = self.repo_path or os.getcwd()
+        print(f"Создана и отправлена ветка: {branch_name} ({target})")

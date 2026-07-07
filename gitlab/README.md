@@ -40,7 +40,14 @@ GitHub-интеграция остаётся в [`.github/`](../.github/) и [`a
 GITLAB_TOKEN=glpat-...                    # Personal / Project Access Token (scope: api)
 GITLAB_PROJECT_ID=12345                   # числовой ID или namespace/project
 GITLAB_WEBHOOK_SECRET=произвольная_строка # тот же token, что в настройках webhook GitLab
+
+# --- Поллер: другой репозиторий (не AutoAgile) ---
+TARGET_REPO_PATH=/path/to/my-other-project   # абсолютный или ~ путь к clone целевого repo
+GIT_BASE_BRANCH=dev                          # базовая ветка (по умолчанию dev)
 ```
+
+`TARGET_REPO_PATH` — локальный clone проекта, куда поллер будет делать `git push origin`.
+`GITLAB_PROJECT_ID` должен указывать на **тот же** проект на GitLab.
 
 `GITLAB_PROJECT_ID` можно узнать на главной странице проекта GitLab (под названием)
 или использовать путь вида `mygroup/AutoAgile`.
@@ -77,6 +84,18 @@ GITLAB_WEBHOOK_SECRET=произвольная_строка # тот же token,
 ---
 
 ## YouGile webhook
+
+Нужно чтобы yougile.env лежал в репо:
+
+```bash
+
+YOUGILE_BEARER_TOKEN=GsacQ+69vxWTLbkh0ZyP6VWYDAGv+3iU0rC-dzloWnYvypYNeXHXTKsUQE+QfL+X
+YOUGILE_PROJECT_ID=a9d30eed-42dc-4fdb-8151-dfe0d444611b
+YOUGILE_BOARD_ID=55e145ef-e1a6-4f7f-b137-f7f353e7e7b1
+YOUGILE_COLUMN_ID=48ddb960-802b-4bc0-8abe-78d7d7510976
+YOUGILE_POLL_INTERVAL=10
+
+---
 
 Без изменений — тот же эндпоинт `/webhook/yougile`:
 

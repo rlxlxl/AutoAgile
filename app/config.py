@@ -187,6 +187,32 @@ def has_saved_monitor_config() -> bool:
     return bool(settings["column_id"])
 
 
+def load_git_settings() -> dict[str, str]:
+    """Load git settings for the poller (branch creation target repo)."""
+    values = _read_yougile_env_values()
+    values.update(_read_env_values())
+
+    def pick(*keys: str) -> str:
+        for key in keys:
+            env_value = os.environ.get(key, "").strip()
+            if env_value:
+                return env_value
+        for key in keys:
+            file_value = values.get(key, "").strip()
+            if file_value:
+                return file_value
+        return ""
+
+    repo_path = pick("TARGET_REPO_PATH")
+    if repo_path:
+        repo_path = os.path.abspath(os.path.expanduser(repo_path))
+
+    return {
+        "repo_path": repo_path,
+        "base_branch": pick("GIT_BASE_BRANCH") or "dev",
+    }
+
+
 def load_monitor_config() -> MonitorConfig:
     settings = load_yougile_settings()
     poll_interval = int(settings["poll_interval"] or "10")
